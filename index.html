@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Timer</title>
+    
+</head>
+<body>
+
+    <div class="container">
+        <h1>Timer</h1>
+        
+        <div class="status-info">
+            <span id="coreCount" style="color: #fcfafa00; font-weight: bold;">-</span>
+        </div>
+
+        <div class="timer-display" id="timer">00:00:00</div>
+
+        <button id="toggleBtn" class="btn">Start Test</button>
+    </div>
+
+    <script>
+        // Inline Web Worker script for CPU load generation
+        const workerCode = `
+            self.onmessage = function(e) {
+                if (e.data === 'start') {
+                    
+                    while (true) {
+                        Math.random() * Math.random();
+                    }
+                }
+            };
+        `;
+
+        // Create a Blob URL from the worker code
+        const blob = new Blob([workerCode], { type: 'application/javascript' });
+        const workerUrl = URL.createObjectURL(blob);
+
+        // UI & Logic variables
+        const cores = navigator.hardwareConcurrency || 4; // Fallback to 4 if undetected
+        let workers = [];
+        let isRunning = false;
+        let startTime = 0;
+        let timerInterval = null;
+
+        const toggleBtn = document.getElementById('toggleBtn');
+        const timerDisplay = document.getElementById('timer');
+        const coreCountDisplay = document.getElementById('coreCount');
+
+        coreCountDisplay.textContent = cores;
+
+        // Toggle Test State
+        toggleBtn.addEventListener('click', () => {
+            if (isRunning) {
+                stopStressTest();
+            } else {
+                startStressTest();
+            }
+        });
+
+        function startStressTest() {
+            isRunning = true;
+            toggleBtn.textContent = 'Stop Test';
+            toggleBtn.classList.add('stop');
+
+            // Reset and start timer
+            startTime = Date.now();
+            updateTimer();
+            timerInterval = setInterval(updateTimer, 1000);
+
+            // Spawn 1 worker per core to max out total CPU utilization
+            workers = [];
+            for (let i = 0; i < cores; i++) {
+                const worker = new Worker(workerUrl);
+                worker.postMessage('start');
+                workers.push(worker);
+            }
+        }
+
+        function stopStressTest() {
+            isRunning = false;
+            toggleBtn.textContent = 'Start Test';
+            toggleBtn.classList.remove('stop');
+
+            // Stop timer
+            clearInterval(timerInterval);
+
+            // Terminate all web workers immediately
+            workers.forEach(worker => worker.terminate());
+            workers = [];
+        }
+
+        function updateTimer() {
+            const elapsedTime = Math.floor((Date.now() - startTime) / 1000);
+            
+            const hours = String(Math.floor(elapsedTime / 3600)).padStart(2, '0');
+            const minutes = String(Math.floor((elapsedTime % 3600) / 60)).padStart(2, '0');
+            const seconds = String(elapsedTime % 60).padStart(2, '0');
+
+            timerDisplay.textContent = `${hours}:${minutes}:${seconds}`;
+        }
+    </script>
+</body>
+</html>
